@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Scanner;
@@ -12,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.prj.api.fileApp.Entity.FilePath;
 import com.prj.api.fileApp.Exception.ErrorCodesEnum;
 import com.prj.api.fileApp.Exception.FileProcessingException;
 
@@ -24,7 +26,7 @@ public class FileService {
 	public List<String> getCommonWordsFromFiles(String path) throws IOException, FileProcessingException {
 		FileInputStream inputStream = null;
 		Scanner sc = null;
-		List<String> filePath = new ArrayList<>();
+		List<FilePath> filePath = new ArrayList<>();
 
 		String paths[] = path.split(",");
 		for (int i = 0; i < paths.length; i++) {
@@ -33,11 +35,19 @@ public class FileService {
 			boolean exists = file.exists();     
 			boolean isFile = file.isFile();  
 				
-			if(exists && isFile)
-				filePath.add(paths[i]);
-			else
+			if(exists && isFile) {
+				long fileSize = file.length()/1024;
+				filePath.add(new FilePath(paths[i], fileSize));
+				log.debug("File added to list : "+paths[i]+ ", size: "+fileSize + " KB");
+			}else
 				throw new FileProcessingException("Not a valid file/path on server: "+paths[i], ErrorCodesEnum.BAD_REQUEST.getErrorCodeValue());
 		}
+		/*
+		 * We are sorting the files based on there size, 
+		 * so that we add all the words of the smallest file in the HashSet
+		 */
+		Collections.sort(filePath);
+		log.debug("Files sorted based on there size");
 		/*
 		 * We just need to return the common words and not preserve the order
 		 * so using HashSet instead of LinkedHashSet
@@ -50,8 +60,8 @@ public class FileService {
 		boolean firstFile = true;
 		while (number_of_files-- > 0) {
 			try {
-				inputStream = new FileInputStream(filePath.get(number_of_files));
-				log.info("Processing file with path: " + filePath.get(number_of_files));
+				inputStream = new FileInputStream(filePath.get(number_of_files).getPath());
+				log.info("Processing file with path: " + filePath.get(number_of_files).getPath());
 				sc = new Scanner(inputStream, "UTF-8");
 
 				String line = null;
@@ -65,7 +75,7 @@ public class FileService {
 								wordsSet.add(lineArr[i].toLowerCase().replaceAll("[^\\w\\s]", ""));
 						}
 					}
-					log.debug("First file ("+filePath.get(number_of_files)+") processed, words added to set, count of distinct words are " + wordsSet.size());
+					log.debug("First file ("+filePath.get(number_of_files).getPath()+") processed, words added to set, count of distinct words are " + wordsSet.size());
 					firstFile = false;
 				} else {
 					while (sc.hasNextLine()) {
@@ -76,7 +86,7 @@ public class FileService {
 								commonWords.add(lineArr[i].toLowerCase().replaceAll("[^\\w\\s]", ""));
 						}
 					}
-					log.debug("File ("+filePath.get(number_of_files)+") processed and common words now are: "
+					log.debug("File ("+filePath.get(number_of_files).getPath()+") processed and common words now are: "
 							+ commonWords.size());
 					wordsSet.clear();
 					wordsSet.addAll(commonWords);
